@@ -1,0 +1,8 @@
+###Chmod activated code that creates and submits PBS scripts based on two parameters, “infile” prefix of input fastq file, and “identifier” SAM output file name 
+###type: ./TransposonMappingcompanionscript infile identifier 
+
+## ID OutputName
+cp  TransposonMappingScript  TransposonMappingScript.$2
+perl -i -pe 's/infile/'$1'/g'  TransposonMappingScript.$2
+perl -i -pe 's/identifier/'$2'/g' TransposonMappingScript.$2
+qsub TransposonMappingScript.$2

@@ -1,0 +1,9 @@
+##This code takes in a multiplexed fastq file and separates reads based on their barcode. Must have txt file with barcodes. 
+
+#!/bin/bash
+#PBS  -o BATCH_OUTPUT.Ht-Seq
+#PBS  -e BATCH_ERRORS.HT-Seq
+#PBS -lnodes=1:ppn=16:compute,walltime=12:00:00
+cd $PBS_O_WORKDIR
+
+cat  file.fastq | fastx_barcode_splitter.pl --bcfile Barcode.part.txt --prefix Barcode.part --bol  --mismatches 1

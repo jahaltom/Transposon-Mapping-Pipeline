@@ -1,0 +1,121 @@
+
+package ReadCounter;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.PrintWriter;
+import java.util.Scanner;
+public class ReadCount {
+
+public static void main(String[] args) throws FileNotFoundException{
+
+	ReadCount c = new ReadCount();
+	
+	File f = new File("/Users/Jeff/Desktop/ZebraFish");
+
+	File[] list = f.listFiles();
+	for (File i: list){
+		File File1 = new File("/ZebraFish/src/ReadCounter/ZebraFishGene.gff");
+		File File2 = i;
+
+		c.Count(File1, File2, i.getName());}}	
+public void Count(File file1, File file2, String name) throws FileNotFoundException{
+	
+File outfile = new File(name);
+PrintWriter out = new PrintWriter(outfile);
+String gene_ID="";
+String chr="";
+int start=0;
+int end=0;
+String Name="";
+String Chr2="";
+int start2=0;
+int end2=0;
+String Name2="";
+String gene_ID2="";
+int count = 1;
+Scanner scan = new Scanner(file1);
+while (scan.hasNext()){
+	
+if (count == 1){	
+	Name=scan.next();
+	gene_ID=scan.next();
+	chr=scan.next();
+	start=scan.nextInt();
+	end=scan.nextInt();}
+	Name2=scan.next();
+	gene_ID2=scan.next();
+	Chr2=scan.next();
+	start2=scan.nextInt();
+	end2=scan.nextInt();
+
+	Scanner scan2 = new Scanner(file2);
+	while (scan2.hasNext()){
+		int read=scan2.nextInt();
+		int insert=scan2.nextInt();
+		String chr2=scan2.next();
+		String ori = scan2.next();
+
+			if (chr2.equals(chr) && insert >= start && insert <= end){
+				out.println(1 + " " + name + " " + gene_ID + " " + Name + " " + chr2 + " " + insert + " " + read + " " + ori ); }
+			if (chr2.equals(Chr2)  && insert >= start2 && insert <= end2){
+				out.println(1 + " " + name + " " + gene_ID2 + " " + Name2 + " " + chr2 + " " + insert + " " + read + " " + ori );}
+
+			if( !(start2 <=end) && insert > end && insert < start2 && chr2.equals(Chr2) && chr2.equals(chr)){
+				int x = start2 - insert;
+				int y = insert - end;
+				if(x<=y){
+				out.println(2 + " " + name + " " + gene_ID2 + " " + x + "_bp_from_" + Name2 + " " + chr2 + " "  + insert + " " + read);}
+				else if(y<x){
+				out.println(2 + " " + name + " " + gene_ID + " " + y + "_bp_from_" + Name + " " + chr2 + " "  + insert + " " + read);} }}
+	count++;
+	Name=Name2;
+	gene_ID=gene_ID2;
+	chr=Chr2;
+	start=start2;
+	end=end2;}
+out.close();
+
+File FILe = outfile;
+Scanner scan3 = new Scanner(FILe);
+File outfile2 = new File(name + "_.txt");
+PrintWriter OUT = new PrintWriter(outfile2);
+
+while (scan3.hasNext()){
+	int z = scan3.nextInt();
+	if (z==1){	
+	    int Tell = 0;
+		String qq = scan3.next();
+		String ID = scan3.next();
+		String mm = scan3.next();
+		int CHR = scan3.nextInt();
+		int INSERT = scan3.nextInt();
+		int READ = scan3.nextInt();
+		String ORI = scan3.next();
+		 
+		File FILE = new File("/ZebraFish/src/ReadCounter/GeneFeature.gff");
+		Scanner scan4 = new Scanner(FILE);
+		String PLUS_MINUS = " ";
+		while (scan4.hasNext()){
+			String feature = scan4.next();
+			int Start = scan4.nextInt();
+			int End = scan4.nextInt();
+			String GeneID = scan4.next();
+			String ExonNum = scan4.next();
+			String Bull = scan4.next();
+
+			if (feature.equals("UTR")){
+				ExonNum = "";}
+			if (ID.equals(GeneID) && ORI.equals(Bull)){
+				PLUS_MINUS = " SAME";}
+			else if(ID.equals(GeneID) && (ORI.equals(Bull))==false){ 
+				PLUS_MINUS = " OPPOSITE";}	
+			if (ID.equals(GeneID) && INSERT >= Start && INSERT <= End){
+				OUT.println(" " + name + " " + ID + " " + mm + " " + CHR + " " + INSERT + " " + READ + 
+						" " + feature + "_"+ ExonNum + " " + PLUS_MINUS ); OUT.flush();
+				Tell =1;	}
+			else{} 	}
+		if (Tell == 0) {OUT.println(" " + name + " " + ID + " " + mm + " " + CHR + " " + INSERT + " " + READ + 
+				" Intron " + PLUS_MINUS); OUT.flush();} }
+	else { OUT.println(scan3.nextLine() + " Intergenic"); 	OUT.flush(); }}
+OUT.close();
+scan3.close(); }}

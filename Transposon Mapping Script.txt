@@ -1,0 +1,154 @@
+#!/bin/bash
+
+#PBS  -o BATCH_OUTPUT.TransposonMap
+#PBS  -e BATCH_ERRORS.TransposonMap
+
+#PBS -lnodes=1:ppn=16:compute,walltime=12:00:00
+
+cd $PBS_O_WORKDIR
+
+mv infile  infile.fastq
+
+module load LAS/trimmomatic/0.33
+
+module load LAS/java/1.8.0_60
+
+###Trims Transposon arm off each read. Arm is 32 bp long. 
+
+java -jar /shared/software/LAS/trimmomatic/0.33/bin/trimmomatic-0.33.jar SE -threads 3 -phred33 -trimlog logfile infile.fastq infile.trimmed.fastq HEADCROP:32 MINLEN:25
+
+rm infile.fastq 
+
+###Fastq_to_Fasta conversion 
+
+ awk 'BEGIN{P=1}{if(P==1||P==2){gsub(/^[@]/,">");print}; if(P==4)P=0; P++}' infile.trimmed.fastq > infile.trimmed.fasta
+rm infile.trimmed.fastq
+
+module load LAS/bowtie/1.1.2
+
+###Align fasta file to ZebrafishV10 genome database 
+bowtie   --best -f -k2 -p7 -v3 /work/LAS/jahaltom/ZebraFishDatabase/ZebraFish/Bowtie_DataBase/ZebraFishV10 /work/LAS/jahaltom/T2OncMapping/infile.trimmed.fasta -S identifier
+
+
+echo>txt
+
+##########Bowtie parameters used were based off the (Brett et al. 2011) study “-best –f –k2 –p7 –v3”.  This gives the top two hits and only allows 3 mismatches in the read sequence. The alignment output was in SAM format and was filtered using the following criteria: the best match had to be at least 90% identical, including a perfect match to the ‘‘TA’’ at the start of the alignment, be at least 5% better than the second best match, and have 2 or less mismatches.
+
+### Finds uniq reads where "TA" instertion location is on left 
+
+##Makes sure no alignment is at position 0 and there are no mismatches in the first two bases of the read. The “TA” . 
+more identifier | grep -v "@" | awk '{if($4 > 0){print $12,$13,$14,$10,$3,$4,$2,$1,$6}}' | awk '{print $1,$2,$4,$5,$6,$7,$8,$9}' | awk '{if($6 ==0){print}}' | grep -v "MD:Z:0" | grep -v "MD:Z:1"  > TAUniqs-10-19
+##Gets back any MD:Z tags that have matches between 10-19.
+more identifier | grep -v "@" | awk '{if($4 > 0){print $12,$13,$14,$10,$3,$4,$2,$1,$6}}' | awk '{print $1,$2,$4,$5,$6,$7,$8,$9}' | awk '{if($6 ==0){print}}' | awk '{if(substr($2,6,7)>=10 && substr($2,6,7)<=19) print }'   > TAUniq10-19
+## Combines previous two files 
+cat TAUniqs-10-19 TAUniq10-19 > TAUniqs
+## ensures that there is a “TA” at the start of every read.
+more TAUniqs |  awk '{if(substr($3,1,2)=="TA") print $7,$8,$2,$5,$4}' > TAGenomic
+## Grabs the names of all the uniq mapped reads. 
+more TAGenomic |  awk '{print $1}' | sort | uniq -c | grep -v "2 " | awk '{print $2}' > TAUniqNames
+##  Grabs data from TAGenomic that relates to each uniq mapped read. 
+more txt | awk 'FNR==NR {a[$1]; next} $1 in a' TAUniqNames TAGenomic | awk '{print $3,$2,$4,$5}' > TA-Uniqs
+## Outputs location, chromosome number, and strand orientation. 
+
+more TA-Uniqs | grep -v "Zv" | awk '{print $3,$4,"+"}' | sort  > TAUniq
+
+rm TAUniqs-10-19
+rm TAUniq10-19
+rm TAUniqs
+rm TAGenomic
+rm TAUniqNames
+rm TA-Uniqs
+
+
+
+
+###Finds uniq reads where "TA" instertion location is on right 
+
+##Makes sure no alignment is at position 0 and there are no mismatches in the last two bases of the read. The “TA” . 
+
+more identifier | grep -v "@" | awk '{if($4 > 0){print $12,$13,$14,$10,$3,$4,$2,$1,$6}}' | awk '{print $1,$2,$4,$5,$6,$7,$8,$9}' | awk '{if($6 ==16){print}}' | awk '{if(substr($2,length($2),length($2))> 1 )print}' > UniqTA2-9
+more identifier | grep -v "@" | awk '{if($4 > 0){print $12,$13,$14,$10,$3,$4,$2,$1,$6}}' | awk '{print $1,$2,$4,$5,$6,$7,$8,$9}' | awk '{if($6 ==16){print}}' | awk '{if(substr($2,length($2)-1,length($2))==10 || substr($2,length($2)-1,length($2))==11 || substr($2,length($2)-1,length($2))==20 || substr($2,length($2)-1,length($2))==21 || substr($2,length($2)-1,length($2))==30 || substr($2,length($2)-1,length($2))==31 || substr($2,length($2)-1,length($2))==40 || substr($2,length($2)-1,length($2))==41 || substr($2,length($2)-1,length($2))==50 || substr($2,length($2)-1,length($2))==51 )print}' > UniqTAGre10
+## Combines the previous two files. 
+cat UniqTA2-9 UniqTAGre10 > UniqsTA	
+## ensures that there is a “TA” at the end of every read.
+more UniqsTA | awk '{if(substr($3,length($3)-1,length($3))=="TA" ) print $7,$8,$2,$5,$4}' > GenomicTA
+## Grabs the names of all the uniq mapped reads. 
+more GenomicTA |  awk '{print $1}' | sort | uniq -c | grep -v "2 " | awk '{print $2}' > UniqNames
+##  Grabs data from GenomicTA that relates to each uniq mapped read. 
+more txt | awk 'FNR==NR {a[$1]; next} $1 in a' UniqNames GenomicTA | awk '{print $3,$2,$4,$5}' > Uniqs
+## Outputs location, chromosome number, and strand orientation. 
+more Uniqs | sed -e 's/M / /g' | grep -v "Zv" | awk '{print $3+$2-1,$4,"-"}' | sort  > UniqTA
+
+
+rm UniqTA2-9
+rm UniqTAGre10
+rm UniqsTA
+rm GenomicTA
+rm UniqNames
+rm Uniqs
+
+
+
+
+
+###Finds mult aligned reads where "TA" instertion location is on right 
+
+##All Mismatch tags ending in 1 or 0 are removed.
+more identifier | grep -v "@" | awk '{if($4 > 0){print $12,$13,$14,$10,$3,$4,$2,$1,$6}}' | awk '{print $1,$2,$4,$5,$6,$7,$8,$9}' | awk '{if($6 ==16){print}}' | awk '{if(substr($2,length($2),length($2))> 1 )print}' > MultTA2-9
+##The mismatch tags (10,11,20,21,30,31,40,41,50,51) that would have been removed in the previous command are extracted.
+more identifier | grep -v "@" | awk '{if($4 > 0){print $12,$13,$14,$10,$3,$4,$2,$1,$6}}' | awk '{print $1,$2,$4,$5,$6,$7,$8,$9}' | awk '{if($6 ==16){print}}' | awk '{if(substr($2,length($2)-1,length($2))==10 || substr($2,length($2)-1,length($2))==11 || substr($2,length($2)-1,length($2))==20 || substr($2,length($2)-1,length($2))==21 || substr($2,length($2)-1,length($2))==30 || substr($2,length($2)-1,length($2))==31 || substr($2,length($2)-1,length($2))==40 || substr($2,length($2)-1,length($2))==41 || substr($2,length($2)-1,length($2))==50 || substr($2,length($2)-1,length($2))==51 )print}' > MultTAGre10
+##The files are now combined. This file should not contain  T0,G0,C0,A1,C1,G1. No mismatches in the 93TA94. All reads will also contain the TA at the end of the read. .
+cat MultTA2-9 MultTAGre10 > MultTA
+more MultTA | awk '{if(substr($3,length($3)-1,length($3))=="TA" ) print $7,$8,$2,$5,$4}' > GenomicTA
+
+##Extracts all the Illumina Names that contain a Mult alignment.
+more GenomicTA |  awk '{print $1}' | sort | uniq -c | grep -v "1 " | awk '{print $2}' > MultNames
+##Extracts data from GenomicTA that is a mult aligned read. 
+more txt | awk 'FNR==NR {a[$1]; next} $1 in a' MultNames GenomicTA | sort | awk '{print $1,$3,$2,$4,$5}' > Mults
+##Counts mismatches
+more Mults | awk '{print $2}' | sed 's/[^G,A,C,T]//g' | awk '{ print length }' > Counts
+##This rearranges the file. Outputs location, chromosome number, and strand orientation. 
+more txt | awk 'NR==FNR{a[NR]=$0;next}{print a[FNR],$0}' Counts Mults | awk '{a=$1; b=$2; c=$3; x=$4; l=$5; k=$6; getline; d=$1; e=$2; f=$3; y=$4 ; m=$5; n=$6; {print a,b,c,x,l,k,d,e,y,f,m,n}}' | sed -e 's/M / /g' | awk '{if((($4-$1)/$4 - ($9-$7)/$9) >= 0.05 || (($4-$1)/$4 - ($9-$7)/$9) <= -0.05) print}' | awk '{if($1<$7) print $1,$5,$6,$4; else print $7,$11,$12,$9; }' | awk '{if(($1 <=2) && (($4-$1)/$4 >=0.90))print $2+$4-1,$3,"-"}' | grep -v "Zv" | sort   >  Mult_TA
+
+rm MultTA2-9
+rm MultTAGre10
+rm MultTA
+rm GenomicTA
+rm  MultNames
+rm Mults
+rm Counts
+
+
+###Finds mult aligned reads where "TA" instertion location is on left
+
+more identifier | grep -v "@" | awk '{if($4 > 0){print $12,$13,$14,$10,$3,$4,$2,$1,$6}}' | awk '{print $1,$2,$4,$5,$6,$7,$8,$9}' | awk '{if($6 ==0){print}}' | grep -v "MD:Z:0" | grep -v "MD:Z:1"  > TAMult-10-19
+more identifier | grep -v "@" | awk '{if($4 > 0){print $12,$13,$14,$10,$3,$4,$2,$1,$6}}' | awk '{print $1,$2,$4,$5,$6,$7,$8,$9}' | awk '{if($6 ==0){print}}' | awk '{if(substr($2,6,7)>=10 && substr($2,6,7)<=19) print }'   > TAMult10-19
+##The files are now combined. This file should not contain or T0,G0,C0,A1,C1,G1. No mismatches in the 93TA94. All reads will also contain the ---TA orientation.
+cat TAMult-10-19 TAMult10-19 > TAMults
+more TAMults |  awk '{if(substr($3,1,2)=="TA") print $7,$8,$2,$5,$4}' > TAGenomic
+more TAGenomic |  awk '{print $1}' | sort | uniq -c | grep -v "1 " | awk '{print $2}' > MultNames
+##A Mults File must be made to add counts too using the previous two files.
+more txt | awk 'FNR==NR {a[$1]; next} $1 in a' MultNames TAGenomic | sort | awk '{print $1,$3,$2,$4,$5}' > Mults
+##Counts mismatches
+more Mults | awk '{print $2}' | sed 's/[^G,A,C,T]//g' | awk '{ print length }' > Counts
+##This rearranges the file. Outputs location, chromosome number, and strand orientation. 
+more txt | awk 'NR==FNR{a[NR]=$0;next}{print a[FNR],$0}' Counts Mults | awk '{a=$1; b=$2; c=$3; x=$4; l=$5; k=$6; getline; d=$1; e=$2; f=$3; y=$4; m=$5; n=$6; {print a,b,c,x,l,k,d,e,y,f,m,n}}' | sed -e 's/M / /g' | awk '{if((($4-$1)/$4 - ($9-$7)/$9) >= 0.05 || (($4-$1)/$4 - ($9-$7)/$9) <= -0.05) print}' | awk '{if($1<$7) print $1,$5,$6,$4; else print $7,$11,$12,$9; }' | awk '{if(($1 <=2) && (($4-$1)/$4 >=0.90))print $2,$3,"+"}' | grep -v "Zv" | sort >  TA_Mult
+
+
+rm Counts
+rm Mults
+rm MultNames
+rm TAGenomic
+rm TAMults
+rm TAMult10-19
+rm TAMult-10-19
+
+
+###Makes a combined file of all read counts, read alignmet locations, chromosome numbers, and strand orientations.
+cat TAUniq UniqTA Mult_TA TA_Mult | sort | uniq -c | sort -rn  | grep -v " -1" | grep -v "3   +"   > infile.txt
+
+rm txt
+rm TAUniq
+rm UniqTA
+rm TA_Mult
+rm Mult_TA
